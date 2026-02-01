@@ -17,7 +17,7 @@ const Navbar = () => {
 
   return (
     <nav className="fixed top-0 left-0 right-0 bg-white border-b border-slate-200 h-16 z-[100] shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 h-full flex justify-between items-center">
+      <div className="w-full px-6 h-full flex justify-between items-center">
          <Link to="/" className="font-bold text-teal-700 text-lg md:text-xl flex items-center gap-2">
             <div className="h-7 w-7 bg-teal-600 text-white rounded-lg flex items-center justify-center text-xs shadow-sm">HS</div>
             <span className="tracking-tight hidden sm:inline">Health Sathi</span>
