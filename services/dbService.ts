@@ -12,7 +12,8 @@ import {
   query, 
   where, 
   getDocs, 
-  orderBy 
+  orderBy,
+  deleteDoc
 } from "firebase/firestore";
 import { auth, db } from "./firebaseConfig";
 import { UserRole, HealthReport, UserProfile } from "../types";
@@ -128,9 +129,23 @@ export const uploadFileToStorage = async (fileData: string, _fileName?: string):
 // --- DATABASE SERVICES ---
 
 export const saveReportToDb = async (report: HealthReport) => {
+  // Sanitize report to ensure no undefined values reach Firestore
+  const sanitizedReport = JSON.parse(JSON.stringify(report, (key, value) => {
+    return value === undefined ? null : value;
+  }));
+
   const reportRef = doc(db, "reports", report.id);
+  
+  // Log size for debugging (Firestore limit is 1MB)
+  const size = new Blob([JSON.stringify(sanitizedReport)]).size;
+  console.log(`Saving report to DB. Size: ${(size / 1024).toFixed(2)} KB`);
+  
+  if (size > 1000000) { // Slightly less than 1MB to be safe
+    throw new Error("Report data is too large for free storage. Try a smaller image or shorter audio.");
+  }
+
   await setDoc(reportRef, {
-    ...report,
+    ...sanitizedReport,
     updatedAt: Date.now()
   });
 };
@@ -146,9 +161,10 @@ export const fetchPatientReports = async (userId: string): Promise<HealthReport[
   return querySnapshot.docs.map(doc => doc.data() as HealthReport);
 };
 
-export const fetchAllReportsForDoctor = async (): Promise<HealthReport[]> => {
+export const fetchAllReportsForDoctor = async (doctorId: string): Promise<HealthReport[]> => {
   const q = query(
     collection(db, "reports"),
+    where("targetDoctorId", "==", doctorId),
     orderBy("timestamp", "desc")
   );
   
@@ -162,6 +178,11 @@ export const updateReportInDb = async (reportId: string, updates: Partial<Health
     ...updates,
     updatedAt: Date.now()
   });
+};
+
+export const deleteReportFromDb = async (reportId: string) => {
+  const reportRef = doc(db, "reports", reportId);
+  await deleteDoc(reportRef);
 };
 
 // Helper for converting Base64 to Blob if needed for other operations
