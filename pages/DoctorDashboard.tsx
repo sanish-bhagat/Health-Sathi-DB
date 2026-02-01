@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store';
-import { ReportStatus, HealthReport, UserRole } from '../types';
+import { ReportStatus, HealthReport, UserRole, UserProfile } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { logoutUser } from '../services/dbService';
@@ -14,7 +14,11 @@ export const DoctorDashboard: React.FC = () => {
     isSidebarOpen, 
     setSidebarOpen, 
     sidebarActiveSection,
-    currentPatientName 
+    currentPatientName,
+    currentUserId,
+    currentUserProfile,
+    updateProfile,
+    deleteReport
   } = useAppStore();
   
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
@@ -22,14 +26,36 @@ export const DoctorDashboard: React.FC = () => {
   const [editNote, setEditNote] = useState("");
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
+  // Profile Editing State
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<UserProfile>>({});
+
   useEffect(() => {
     loadReports();
   }, [loadReports]);
+
+  // Sync edit form with profile data when opening edit mode
+  useEffect(() => {
+    if (isEditingProfile) {
+      if (currentUserProfile) {
+        setEditForm(currentUserProfile);
+      } else {
+        setEditForm({ name: currentPatientName, email: '' });
+      }
+    }
+  }, [isEditingProfile, currentUserProfile, currentPatientName]);
 
   const handleLogout = async () => {
     await logoutUser();
     setSidebarOpen(false);
     setAuth(UserRole.GUEST, '', null);
+  };
+
+  const handleProfileSave = async () => {
+    if (Object.keys(editForm).length > 0) {
+       await updateProfile(editForm);
+    }
+    setIsEditingProfile(false);
   };
 
   // Sort: Critical -> Warning (Pending) -> Review
@@ -42,11 +68,19 @@ export const DoctorDashboard: React.FC = () => {
     return statusOrder[a.status] - statusOrder[b.status] || b.timestamp - a.timestamp;
   });
 
-  const selectedReport = reports.find(r => r.id === selectedReportId) || sortedReports[0];
+  const selectedReport = reports.find(r => r.id === selectedReportId);
   
   useEffect(() => {
-    setIsEditing(false);
-    setEditNote("");
+    if (!selectedReportId && reports.length > 0 && window.innerWidth >= 768) {
+      setSelectedReportId(sortedReports[0].id);
+    }
+  }, [reports, selectedReportId, sortedReports]);
+
+  useEffect(() => {
+    if (selectedReport) {
+      setIsEditing(false);
+      setEditNote("");
+    }
   }, [selectedReport?.id]);
 
   const previousReport = selectedReport 
@@ -54,17 +88,20 @@ export const DoctorDashboard: React.FC = () => {
     : null;
 
   const handleApprove = async (id: string) => {
-    const report = reports.find(r => r.id === id);
-    const doctorName = report?.targetDoctorName || currentPatientName;
-    const displayName = doctorName.startsWith("Dr.") ? doctorName : `Dr. ${doctorName}`;
-    await updateReportStatus(id, ReportStatus.REVIEWED, `-Reviewed by ${displayName}`);
+    await updateReportStatus(id, ReportStatus.REVIEWED, "Approved by Dr. Singh.");
   };
 
   const handleEscalate = async (id: string) => {
-    const report = reports.find(r => r.id === id);
-    const doctorName = report?.targetDoctorName || currentPatientName;
-    const displayName = doctorName.startsWith("Dr.") ? doctorName : `Dr. ${doctorName}`;
-    await updateReportStatus(id, ReportStatus.CRITICAL, `Escalated for Tele-consult by ${displayName}`);
+    await updateReportStatus(id, ReportStatus.CRITICAL, "Escalated for Tele-consult.");
+  };
+
+  const handleDeleteReport = async (id: string) => {
+    if (window.confirm("Are you sure you want to delete this report from the database? This action cannot be undone.")) {
+      await deleteReport(id);
+      if (selectedReportId === id) {
+        setSelectedReportId(null);
+      }
+    }
   };
 
   const handleStartModify = () => {
@@ -79,16 +116,7 @@ export const DoctorDashboard: React.FC = () => {
 
   const handleSaveModification = async () => {
     if (selectedReport) {
-      const doctorName = selectedReport.targetDoctorName || currentPatientName;
-      const displayName = doctorName.startsWith("Dr.") ? doctorName : `Dr. ${doctorName}`;
-      
-      let finalNote = editNote.trim();
-      // Only append if it doesn't already seem to have a signature with the doctor's name
-      if (!finalNote.toLowerCase().includes(displayName.toLowerCase())) {
-        finalNote += `\n\n-Reviewed by ${displayName}`;
-      }
-
-      await updateReportStatus(selectedReport.id, ReportStatus.REVIEWED, finalNote);
+      await updateReportStatus(selectedReport.id, ReportStatus.REVIEWED, editNote);
       setIsEditing(false);
     }
   };
@@ -118,33 +146,70 @@ export const DoctorDashboard: React.FC = () => {
 
           {sidebarActiveSection === 'profile' ? (
             <div className="animate-in fade-in slide-in-from-left-4 duration-300">
-              <section className="mb-12">
+              <section className="mb-12 relative">
+                {!isEditingProfile && (
+                  <button onClick={() => setIsEditingProfile(true)} className="absolute top-0 right-0 p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Edit Profile">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                  </button>
+                )}
                 <div className="text-center mb-8">
-                   <div className="h-28 w-28 mx-auto bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center text-5xl font-bold border border-indigo-100 shadow-sm mb-5 transform -rotate-2">
+                   <div className="h-28 w-28 mx-auto bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center text-5xl font-bold border border-indigo-100 shadow-sm mb-5">
                      Dr
                    </div>
                    <h3 className="text-2xl font-bold text-slate-900">{currentPatientName}</h3>
-                   <p className="text-xs text-indigo-600 font-bold uppercase tracking-widest mt-2">Verified Medical Professional</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-8">
-                   <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-sm">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">Total Reviews</p>
-                      <p className="font-bold text-xl text-slate-800">{reports.length}</p>
-                   </div>
-                   <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-sm">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">Active Alerts</p>
-                      <p className="font-bold text-xl text-red-600">{reports.filter(r => r.status === ReportStatus.CRITICAL).length}</p>
-                   </div>
-                </div>
+                {isEditingProfile ? (
+                  <div className="space-y-4 mb-8">
+                      <div>
+                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Specialization</label>
+                         <input 
+                           type="text" 
+                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                           value={editForm.specialization || ""} 
+                           onChange={e => setEditForm({...editForm, specialization: e.target.value})} 
+                           placeholder="e.g. Cardiologist"
+                         />
+                       </div>
+                       <div>
+                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Hospital Name</label>
+                         <input 
+                           type="text" 
+                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                           value={editForm.hospitalName || ""} 
+                           onChange={e => setEditForm({...editForm, hospitalName: e.target.value})} 
+                           placeholder="e.g. City General Hospital"
+                         />
+                       </div>
+                      <div className="flex gap-3 pt-2">
+                        <Button fullWidth onClick={handleProfileSave} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20">Save</Button>
+                        <Button fullWidth variant="outline" onClick={() => setIsEditingProfile(false)}>Cancel</Button>
+                      </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-4 mb-8">
+                      <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">Total Reviews</p>
+                          <p className="font-bold text-xl text-slate-800">{reports.length}</p>
+                      </div>
+                      <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">Active Alerts</p>
+                          <p className="font-bold text-xl text-red-600">{reports.filter(r => r.status === ReportStatus.CRITICAL).length}</p>
+                      </div>
 
-                <div className="bg-gradient-to-br from-indigo-600 to-blue-700 p-6 rounded-[2rem] text-white shadow-xl">
-                   <p className="text-[10px] font-bold uppercase mb-3 flex items-center gap-2 opacity-90">
-                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3a1 1 0 00-.787 0l-7 3a1 1 0 000 1.838l1.69.724z"></path></svg>
-                     Specialty: Internal Medicine
-                   </p>
-                   <p className="text-xs leading-relaxed font-medium">Accessing clinical protocols from Sathi's Medical Library Chapter 1-4 for verification triage.</p>
-                </div>
+                      <div className="col-span-2 bg-indigo-600 rounded-2xl p-5 text-white shadow-lg shadow-indigo-600/20">
+                        <p className="text-[10px] font-bold uppercase mb-2 flex items-center gap-2 opacity-90">
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3a1 1 0 00-.787 0l-7 3a1 1 0 000 1.838l1.69.724z"></path></svg>
+                          {currentUserProfile?.specialization || 'General Physician'}
+                        </p>
+                        <p className="text-[11px] leading-relaxed font-medium opacity-80">
+                          Working at {currentUserProfile?.hospitalName || 'your medical center'}.
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )}
               </section>
             </div>
           ) : (
@@ -175,13 +240,13 @@ export const DoctorDashboard: React.FC = () => {
              className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:text-red-600 hover:bg-red-50 hover:border-red-100 transition-all font-bold text-xs uppercase tracking-widest shadow-sm"
            >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-              Logout from Portal
+              Logout
            </button>
         </div>
       </aside>
 
       {/* --- TRIAGE SIDEBAR (Left Panel) --- */}
-      <div className="w-full md:w-1/3 lg:w-1/4 bg-white border-r border-slate-200 flex flex-col h-full">
+      <div className={`w-full md:w-1/3 lg:w-1/4 bg-white border-r border-slate-200 flex flex-col h-full ${selectedReportId ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b border-slate-100 bg-slate-50">
           <h2 className="font-bold text-slate-800 text-lg">Patient Triage</h2>
           <div className="flex gap-2 mt-2">
@@ -204,9 +269,18 @@ export const DoctorDashboard: React.FC = () => {
                 <h3 className={`font-semibold text-sm ${selectedReport?.id === report.id ? 'text-indigo-900' : 'text-slate-700'}`}>
                   {report.patientName}
                 </h3>
-                {report.status === ReportStatus.CRITICAL && (
-                   <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse-red"></span>
-                )}
+                <div className="flex items-center gap-1">
+                  {report.status === ReportStatus.CRITICAL && (
+                    <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse-red"></span>
+                  )}
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleDeleteReport(report.id); }}
+                    className="p-1 text-slate-300 hover:text-red-600 rounded transition-colors"
+                    title="Delete Report"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                  </button>
+                </div>
               </div>
               <p className="text-xs text-slate-400 mb-2">{new Date(report.timestamp).toLocaleDateString()}</p>
               
@@ -223,16 +297,30 @@ export const DoctorDashboard: React.FC = () => {
       </div>
 
       {/* --- MAIN REVIEW WORKSPACE --- */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+      <div className={`flex-1 flex flex-col h-full overflow-hidden relative ${!selectedReportId ? 'hidden md:flex' : 'flex'}`}>
         {selectedReport ? (
           <>
             <header className="bg-white p-6 border-b border-slate-200 shadow-sm z-10">
                <div className="flex justify-between items-start">
-                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">{selectedReport.patientName}</h1>
-                    <p className="text-sm text-slate-500 mt-1">
-                      Report ID: {selectedReport.id} • {new Date(selectedReport.timestamp).toLocaleString()}
-                    </p>
+                 <div className="flex items-center gap-3">
+                    {/* Back Button for Mobile */}
+                    <button 
+                      onClick={() => setSelectedReportId(null)}
+                      className="md:hidden p-2 -ml-2 text-slate-400 hover:text-indigo-600 transition-colors"
+                      title="Back to Triage"
+                    >
+                       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
+                    </button>
+                    
+                    <div className="relative">
+                       <h1 className="text-2xl font-bold text-slate-900">
+                         {selectedReport.patientName}
+                       </h1>
+                       
+                       <p className="text-sm text-slate-500 mt-1">
+                        {new Date(selectedReport.timestamp).toLocaleString()}
+                       </p>
+                    </div>
                  </div>
                  {selectedReport.aiAnalysis && (
                    <div className="flex flex-col items-end">
