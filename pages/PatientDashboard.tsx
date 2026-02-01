@@ -81,7 +81,8 @@ export const PatientDashboard: React.FC = () => {
     setAuth,
     updateProfile,
     loadDoctors,
-    availableDoctors
+    availableDoctors,
+    deleteReport
   } = useAppStore();
 
   const [isProcessing, setIsProcessing] = useState(false);
@@ -94,6 +95,9 @@ export const PatientDashboard: React.FC = () => {
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>(""); 
   const [doctorSearchQuery, setDoctorSearchQuery] = useState("");
   const [isDoctorDropdownOpen, setIsDoctorDropdownOpen] = useState(false);
+  
+  // Document Preview State
+  const [previewDoc, setPreviewDoc] = useState<{ url: string, type: 'image' | 'pdf' } | null>(null);
   
   // Profile Editing State
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -151,6 +155,12 @@ export const PatientDashboard: React.FC = () => {
        await updateProfile(editForm);
     }
     setIsEditingProfile(false);
+  };
+
+  const handleDeleteReport = async (id: string) => {
+    if (window.confirm("Are you sure you want to delete this assessment? This action cannot be undone.")) {
+      await deleteReport(id);
+    }
   };
 
   const compressImage = (base64Str: string, maxWidth = 1200, maxHeight = 1200, quality = 0.7): Promise<string> => {
@@ -221,7 +231,7 @@ export const PatientDashboard: React.FC = () => {
     const report = reports.find(r => r.id === reportId);
     if (!report) return;
 
-    if (targetLang === (report.aiAnalysis?.detected_language || "Hindi")) {
+    if (targetLang === "Hindi") {
       setReportTranslations(prev => ({
         ...prev,
         [reportId]: { lang: targetLang, text: report.aiAnalysis?.local_language_guidance || "", loading: false }
@@ -308,9 +318,9 @@ export const PatientDashboard: React.FC = () => {
         audioUri: audioStorageUrl,
         status: status,
         aiAnalysis: analysis,
-        targetDoctorId: selectedDoctorId || undefined,
-        targetDoctorName: selectedDoc ? selectedDoc.name : undefined
-      };
+        targetDoctorId: selectedDoctorId || null,
+        targetDoctorName: selectedDoc ? selectedDoc.name : null
+      } as any;
 
       await saveReportToDb(newReport);
       addReportLocal(newReport);
@@ -323,9 +333,10 @@ export const PatientDashboard: React.FC = () => {
       setDoctorSearchQuery("");
       if (fileInputRef.current) fileInputRef.current.value = '';
       
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("Failed to analyze. Please check your connection.");
+      const errorMessage = error.message || "Failed to analyze. Please check your connection.";
+      alert(errorMessage);
     } finally {
       setIsProcessing(false);
     }
@@ -368,24 +379,23 @@ export const PatientDashboard: React.FC = () => {
                      {currentPatientName.charAt(0)}
                    </div>
                    <h3 className="text-2xl font-bold text-slate-900">{currentPatientName}</h3>
-                   <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-2">Verified Health Sathi Member</p>
-                 </div>
+                </div>
                  {isEditingProfile ? (
                    <div className="space-y-4 mb-8">
                       <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Weight (kg)</label>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Weight (kg)</label>
                         <input 
                           type="text" 
-                          className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
                           value={editForm.weight || ""} 
                           onChange={e => setEditForm({...editForm, weight: e.target.value})} 
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Age</label>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Age</label>
                         <input 
                           type="text" 
-                          className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
                           value={editForm.age || ""} 
                           onChange={e => setEditForm({...editForm, age: e.target.value})} 
                         />
@@ -452,7 +462,16 @@ export const PatientDashboard: React.FC = () => {
 
                 {/* 2. UPLOAD REPORT (Primary) */}
                 <button 
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => {
+                    if (selectedImage || selectedPdf) {
+                      setPreviewDoc({
+                        url: selectedImage ? `data:${imgMime};base64,${selectedImage}` : `data:${pdfMime};base64,${selectedPdf}`,
+                        type: selectedPdf ? 'pdf' : 'image'
+                      });
+                    } else {
+                      fileInputRef.current?.click();
+                    }
+                  }}
                   className={`relative rounded-3xl border-2 transition-all duration-300 flex flex-col items-center justify-center p-6 gap-4 min-h-[160px] ${selectedImage || selectedPdf ? 'bg-teal-50 border-teal-200' : 'bg-slate-50 border-slate-100 hover:border-teal-200 hover:bg-teal-50/10'}`}
                 >
                    {selectedImage || selectedPdf ? (
@@ -462,9 +481,17 @@ export const PatientDashboard: React.FC = () => {
                         </div>
                          <div className="text-center">
                            <p className="text-sm font-bold text-teal-700">File Attached</p>
-                           <p className="text-[10px] text-teal-600 font-bold uppercase">Ready</p>
+                           <p className="text-[10px] text-teal-600 font-bold uppercase">READY</p>
                         </div>
-                        <div className="absolute top-3 right-3 text-teal-400 hover:text-red-500 p-2" onClick={(e) => { e.stopPropagation(); setSelectedImage(null); setSelectedPdf(null); }}>
+                        <div 
+                          className="absolute top-3 right-3 text-teal-400 hover:text-red-500 p-2 transition-colors" 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setSelectedImage(null); 
+                            setSelectedPdf(null); 
+                            if (fileInputRef.current) fileInputRef.current.value = '';
+                          }}
+                        >
                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                         </div>
                       </>
@@ -595,7 +622,7 @@ export const PatientDashboard: React.FC = () => {
              <div className="space-y-8">
                {reports.map((report) => {
                  const currentTrans = reportTranslations[report.id] || { 
-                   lang: report.aiAnalysis?.detected_language || "Hindi", 
+                   lang: "Hindi", 
                    text: report.aiAnalysis?.local_language_guidance || "", 
                    loading: false 
                  };
@@ -630,6 +657,13 @@ export const PatientDashboard: React.FC = () => {
                        }`}>
                          {report.status}
                        </span>
+                       <button 
+                         onClick={(e) => { e.stopPropagation(); handleDeleteReport(report.id); }}
+                         className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1"
+                         title="Delete Assessment"
+                       >
+                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                       </button>
                      </div>
                    </div>
                    
@@ -640,6 +674,21 @@ export const PatientDashboard: React.FC = () => {
                             <div className="flex justify-between items-center">
                                 <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide text-teal-700">Analysis & Guidance</h3>
                                 <div className="flex items-center gap-3">
+                                   {(report.imageUri || report.pdfUri) && (
+                                     <button 
+                                       onClick={(e) => { 
+                                         e.stopPropagation(); 
+                                         setPreviewDoc({ 
+                                           url: report.imageUri || report.pdfUri || "", 
+                                           type: report.pdfUri ? 'pdf' : 'image' 
+                                         }); 
+                                       }}
+                                       className="text-[10px] text-teal-600 hover:text-teal-800 font-bold uppercase tracking-wider flex items-center gap-1 bg-teal-50 px-2 py-1 rounded-lg border border-teal-100 hover:border-teal-300 transition-colors"
+                                     >
+                                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                       View Original
+                                     </button>
+                                   )}
                                    <button 
                                      onClick={(e) => { e.stopPropagation(); generateReportPDF(report); }}
                                      className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold uppercase tracking-wider flex items-center gap-1 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100 hover:border-indigo-300 transition-colors"
@@ -717,6 +766,50 @@ export const PatientDashboard: React.FC = () => {
            )}
         </section>
       </main>
+
+      {/* --- DOCUMENT PREVIEW MODAL --- */}
+      {previewDoc && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 md:p-10">
+          <div 
+            className="absolute inset-0 bg-slate-900/80 backdrop-blur-md"
+            onClick={() => setPreviewDoc(null)}
+          />
+          <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
+              <h3 className="text-lg font-bold text-slate-800">Original Document</h3>
+              <button 
+                onClick={() => setPreviewDoc(null)}
+                className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
+            </div>
+            
+            {/* Modal Body */}
+            <div className="flex-1 overflow-auto p-4 sm:p-6 bg-slate-50 flex items-center justify-center">
+              {previewDoc.type === 'image' ? (
+                <img 
+                  src={previewDoc.url} 
+                  alt="Original Document" 
+                  className="max-w-full h-auto rounded-xl shadow-lg"
+                />
+              ) : (
+                <iframe 
+                  src={previewDoc.url} 
+                  className="w-full h-[70vh] rounded-xl border-none shadow-lg bg-white"
+                  title="PDF Document"
+                />
+              )}
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-slate-100 bg-white flex justify-end">
+              <Button onClick={() => setPreviewDoc(null)}>Close Preview</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
