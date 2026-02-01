@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "YOUR_API_KEY",
@@ -15,5 +15,14 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Use initializeFirestore to enable long-polling and persistent cache
+// This helps resolve net::ERR_ABORTED errors in restrictive network environments
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache(), // Simplified cache
+  experimentalForceLongPolling: true, // Forces Firestore to use standard HTTP requests
+  experimentalAutoDetectLongPolling: false,
+  ignoreUndefinedProperties: true, // Automatically handle undefined values
+});
+
 export default app;
