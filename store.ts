@@ -7,7 +7,8 @@ import {
   fetchAllReportsForDoctor, 
   updateReportInDb, 
   updateUserInDb, 
-  fetchAvailableDoctors 
+  fetchAvailableDoctors,
+  deleteReportFromDb
 } from './services/dbService';
 
 interface AppState {
@@ -32,6 +33,7 @@ interface AppState {
   loadDoctors: () => Promise<void>;
   updateReportStatus: (id: string, status: ReportStatus, notes?: string) => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
+  deleteReport: (id: string) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>()(
@@ -64,17 +66,16 @@ export const useAppStore = create<AppState>()(
       loadReports: async () => {
         const { currentUserRole, currentUserId } = get();
         
-        // Doctors should see all reports, Patients only theirs
-        if (currentUserRole === UserRole.GUEST) return;
+        if (currentUserRole === UserRole.GUEST || !currentUserId) return;
         
         set({ isLoading: true });
         try {
           let fetchedReports: HealthReport[] = [];
-          if (currentUserRole === UserRole.PATIENT && currentUserId) {
+          if (currentUserRole === UserRole.PATIENT) {
             fetchedReports = await fetchPatientReports(currentUserId);
           } else if (currentUserRole === UserRole.DOCTOR) {
-            // Doctors fetch all patient reports for triage
-            fetchedReports = await fetchAllReportsForDoctor();
+            // Doctors fetch only reports linked to them
+            fetchedReports = await fetchAllReportsForDoctor(currentUserId);
           }
           set({ reports: fetchedReports });
         } catch (e) {
@@ -119,6 +120,21 @@ export const useAppStore = create<AppState>()(
           await updateUserInDb(currentUserId, updates);
         } catch (e) {
           console.error("Failed to update profile", e);
+        }
+      },
+
+      deleteReport: async (id) => {
+        // Optimistic Update
+        set((state) => ({
+          reports: state.reports.filter((r) => r.id !== id)
+        }));
+
+        try {
+          await deleteReportFromDb(id);
+        } catch (e) {
+          console.error("Failed to delete report from DB", e);
+          // Rollback if needed (though usually not necessary for a simple delete)
+          await get().loadReports(); 
         }
       }
     }),
