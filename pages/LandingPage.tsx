@@ -28,9 +28,9 @@ export const LandingPage: React.FC = () => {
       <section className="relative pt-32 pb-20 lg:pt-40 lg:pb-28 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-teal-50 to-slate-50 z-0"></div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
-          <div className="inline-block mb-4 px-4 py-1.5 rounded-full bg-teal-100 border border-teal-200">
-             <span className="text-xs font-bold text-teal-700 uppercase tracking-wide">✨ Powered by Team Envision</span>
-          </div>
+          //<div className="inline-block mb-4 px-4 py-1.5 rounded-full bg-teal-100 border border-teal-200">
+            // <span className="text-xs font-bold text-teal-700 uppercase tracking-wide">✨ Powered by Team Envision</span>
+         // </div>
           <h1 className="text-4xl md:text-6xl font-extrabold text-slate-900 tracking-tight leading-tight mb-6">
             Healthcare Simplified with <br className="hidden md:block"/> 
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-600 to-emerald-600">Multimodal AI</span>
