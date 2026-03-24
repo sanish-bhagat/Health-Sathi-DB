@@ -37,6 +37,8 @@ export interface MedicationDetail {
 }
 
 export interface AIGuidance {
+  is_health_related: boolean;
+  rejection_reason?: string;
   english_guidance: string;
   local_language_guidance: string;
   detected_language?: string;

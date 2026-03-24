@@ -11,6 +11,8 @@ const ai = new GoogleGenAI({ apiKey });
 const responseSchema = {
   type: Type.OBJECT,
   properties: {
+    is_health_related: { type: Type.BOOLEAN, description: "Whether the input is health/medical related. Must be checked first." },
+    rejection_reason: { type: Type.STRING, description: "Reason if not health-related", nullable: true },
     english_guidance: { type: Type.STRING },
     local_language_guidance: { type: Type.STRING },
     detected_language: { type: Type.STRING },
@@ -46,7 +48,7 @@ const responseSchema = {
     },
     comparison_summary: { type: Type.STRING, description: "Summary of changes vs previous history", nullable: true }
   },
-  required: ["english_guidance", "local_language_guidance", "detected_language", "medications", "medication_details", "is_critical", "confidence_score", "extracted_values"]
+  required: ["is_health_related", "english_guidance", "local_language_guidance", "detected_language", "medications", "medication_details", "is_critical", "confidence_score", "extracted_values"]
 };
 
 export const analyzeMedicalInputs = async (
@@ -105,6 +107,22 @@ export const analyzeMedicalInputs = async (
     if (!text) throw new Error("No response from AI");
 
     const parsed = JSON.parse(text);
+
+    // If the AI determined the input is not health-related, return a standardized fallback
+    if (parsed.is_health_related === false) {
+      return {
+        is_health_related: false,
+        rejection_reason: parsed.rejection_reason || "The input does not appear to be health or medical related.",
+        english_guidance: "This query is not health-related. Health Sathi can only analyze medical documents, prescriptions, lab reports, and health symptoms. Please upload a valid medical input.",
+        local_language_guidance: "यह प्रश्न स्वास्थ्य से संबंधित नहीं है। Health Sathi केवल चिकित्सा दस्तावेज़, प्रिस्क्रिप्शन, लैब रिपोर्ट और स्वास्थ्य लक्षणों का विश्लेषण कर सकता है। कृपया एक वैध चिकित्सा इनपुट अपलोड करें।",
+        detected_language: "Hindi",
+        medications: [],
+        medication_details: [],
+        is_critical: false,
+        confidence_score: 0,
+        extracted_values: {},
+      } as AIGuidance;
+    }
     
     if (Array.isArray(parsed.extracted_values)) {
       const valuesMap: Record<string, string> = {};
